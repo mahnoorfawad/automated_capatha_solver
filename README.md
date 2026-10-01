@@ -83,6 +83,19 @@ extension/
 - **Grid challenges** are split into tiles and upscaled to at least 224 px. The model answers yes/no per tile (or, with the grid strategy, returns a list of numbered cells). For dynamic reCAPTCHA rounds, the replacement tiles are classified again until none match.
 - **Loop safety:** each widget runs at most *Max rounds* attempts. Solved challenges are tracked by a signature so the same one isn't retried, and text inputs the user has typed into are never overwritten.
 
+## Performance: GPU vs CPU
+
+Ollama resizes every image to a fixed size, so each **new** image costs about 1,100 prompt tokens with `qwen2.5vl:7b`, however small the captcha is. Measured times:
+
+| Hardware | Time per new image (`qwen2.5vl:7b`) |
+|---|---|
+| Laptop CPU only (Intel Core 5 210H, 8 cores, 16 GB RAM) | ~90–100 s |
+| Same image sent a second time (Ollama cache) | 2–5 s |
+
+On a CPU-only machine, text and math captchas work, but you have to wait about 1.5 minutes. Image-grid challenges need 9–16 requests, which isn't practical on a CPU. For those, use a GPU, use **Hugging Face**, or set **Tile strategy → One request with numbered grid**. Defaults are tuned for CPU: one request at a time, with a 5-minute timeout. Raise **Parallel requests** when using Hugging Face or a GPU server.
+
+Close other large models (`ollama ps`). With 16 GB of RAM, two loaded models can push every request past the timeout.
+
 ## Limitations
 
 - Accuracy depends on the model. `qwen2.5vl:7b` reads text captchas well. Object tiles (traffic lights, crosswalks) are noticeably better with larger models (Qwen2.5-VL-32B/72B on Hugging Face).

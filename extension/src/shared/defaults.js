@@ -37,7 +37,7 @@ globalThis.CS_DEFAULTS = Object.freeze({
   gridStrategy: 'tile',
 
   maxRounds: 6,
-  concurrency: 3,
-  requestTimeoutMs: 120000,
+  concurrency: 1, // Ollama processes one request at a time by default; raise for Hugging Face or GPU servers
+  requestTimeoutMs: 300000, // CPU-only machines need ~1-2 min per image
   debug: false,
 });

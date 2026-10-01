@@ -23,7 +23,7 @@ class Semaphore {
   }
 }
 
-let semaphore = new Semaphore(3);
+let semaphore = new Semaphore(1);
 export function setConcurrency(n) {
   if (n !== semaphore.max) semaphore = new Semaphore(Math.max(1, n | 0));
 }

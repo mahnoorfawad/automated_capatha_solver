@@ -96,7 +96,7 @@ try {
   await cdp('Page.bringToFront', {}, sessionId);
 
   // Wait until every input is filled (or time out).
-  const deadline = Date.now() + 5 * 60 * 1000;
+  const deadline = Date.now() + 15 * 60 * 1000;
   let state;
   while (Date.now() < deadline) {
     await sleep(3000);
@@ -104,7 +104,7 @@ try {
       sessionId,
       `[...document.querySelectorAll('form')].map(f => ({ kind: f.dataset.kind, value: f.querySelector('input').value }))`
     ).catch(() => null);
-    if (state && state.every((s) => s.value)) break;
+    if (state?.length && state.every((s) => s.value)) break;
   }
   await sleep(1500);
 
