@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AI Captcha Solver</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <img src="../../icons/icon48.png" alt="" width="28" height="28" />
+    <h1>AI Captcha Solver</h1>
+    <label class="switch" title="Enable / disable">
+      <input type="checkbox" data-key="enabled" />
+      <span></span>
+    </label>
+  </header>
+
+  <section class="actions">
+    <button id="solveNow" class="primary">Solve now</button>
+    <button id="visualSolve" title="Screenshot the page and let the model decide what to click/type/drag">Visual solve</button>
+  </section>
+
+  <section>
+    <h2>Model</h2>
+    <label>Provider
+      <select data-key="provider">
+        <option value="ollama">Ollama (local)</option>
+        <option value="huggingface">Hugging Face (free API)</option>
+        <option value="openai">OpenAI-compatible (LM Studio, llama.cpp, vLLM…)</option>
+      </select>
+    </label>
+
+    <div data-show="provider=ollama">
+      <label>Ollama URL <input data-key="ollamaUrl" type="url" /></label>
+      <label>Vision model <input data-key="ollamaModel" list="ollamaModels" /></label>
+      <datalist id="ollamaModels">
+        <option value="qwen2.5vl:7b"></option>
+        <option value="qwen2.5vl:3b"></option>
+        <option value="llama3.2-vision"></option>
+        <option value="gemma3:4b"></option>
+        <option value="gemma3:12b"></option>
+        <option value="minicpm-v"></option>
+        <option value="llava:7b"></option>
+      </datalist>
+    </div>
+
+    <div data-show="provider=huggingface">
+      <label>HF access token <input data-key="hfToken" type="password" placeholder="hf_…" /></label>
+      <label>Model <input data-key="hfModel" list="hfModels" /></label>
+      <datalist id="hfModels">
+        <option value="Qwen/Qwen2.5-VL-7B-Instruct"></option>
+        <option value="Qwen/Qwen2.5-VL-32B-Instruct"></option>
+        <option value="Qwen/Qwen2.5-VL-72B-Instruct"></option>
+        <option value="google/gemma-3-27b-it"></option>
+        <option value="meta-llama/Llama-4-Scout-17B-16E-Instruct"></option>
+      </datalist>
+      <label>API base URL <input data-key="hfBaseUrl" type="url" /></label>
+    </div>
+
+    <div data-show="provider=openai">
+      <label>Base URL <input data-key="openaiUrl" type="url" /></label>
+      <label>API key (optional) <input data-key="openaiKey" type="password" /></label>
+      <label>Model <input data-key="openaiModel" /></label>
+    </div>
+
+    <button id="test">Test connection</button>
+    <pre id="testResult" hidden></pre>
+  </section>
+
+  <section>
+    <h2>Solvers</h2>
+    <div class="grid">
+      <label class="check"><input type="checkbox" data-key="solveText" /> Text / number images</label>
+      <label class="check"><input type="checkbox" data-key="solveMath" /> Math &amp; questions</label>
+      <label class="check"><input type="checkbox" data-key="solveRecaptcha" /> reCAPTCHA v2</label>
+      <label class="check"><input type="checkbox" data-key="solveHcaptcha" /> hCaptcha</label>
+      <label class="check"><input type="checkbox" data-key="solveTurnstile" /> Turnstile</label>
+      <label class="check"><input type="checkbox" data-key="autoSolve" /> Solve automatically</label>
+      <label class="check"><input type="checkbox" data-key="autoSubmit" /> Submit text forms</label>
+    </div>
+  </section>
+
+  <details>
+    <summary>reCAPTCHA audio &amp; advanced</summary>
+    <label>reCAPTCHA strategy
+      <select data-key="recaptchaMode">
+        <option value="image">Image tiles (vision model)</option>
+        <option value="audio">Audio (speech-to-text)</option>
+      </select>
+    </label>
+    <label>Speech-to-text
+      <select data-key="sttProvider">
+        <option value="none">Off</option>
+        <option value="huggingface">Hugging Face Whisper (uses HF token)</option>
+        <option value="openai">OpenAI-compatible /audio/transcriptions</option>
+      </select>
+    </label>
+    <div data-show="sttProvider=huggingface">
+      <label>Whisper model <input data-key="hfSttModel" /></label>
+      <label>HF access token <input data-key="hfToken" type="password" placeholder="hf_…" /></label>
+    </div>
+    <div data-show="sttProvider=openai">
+      <label>STT model <input data-key="openaiSttModel" /></label>
+      <p class="hint">Uses the OpenAI-compatible base URL and key from the Model section.</p>
+    </div>
+    <label>Tile strategy
+      <select data-key="gridStrategy">
+        <option value="tile">Ask per tile (accurate)</option>
+        <option value="grid">One request with numbered grid (fast)</option>
+      </select>
+    </label>
+    <div class="row">
+      <label>Parallel requests <input data-key="concurrency" type="number" min="1" max="16" /></label>
+      <label>Max rounds <input data-key="maxRounds" type="number" min="1" max="20" /></label>
+    </div>
+    <label>Request timeout (ms) <input data-key="requestTimeoutMs" type="number" min="5000" step="1000" /></label>
+    <label class="check"><input type="checkbox" data-key="debug" /> Debug logging in page console</label>
+  </details>
+
+  <section>
+    <h2>Activity <small id="stats"></small></h2>
+    <ul id="log"></ul>
+    <button id="clearLog" class="link">Clear</button>
+  </section>
+
+  <footer>Shortcuts: <kbd>Alt+Shift+S</kbd> solve · <kbd>Alt+Shift+V</kbd> visual · right-click an image → “Solve CAPTCHA in this image”</footer>
+
+  <script src="../shared/defaults.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
