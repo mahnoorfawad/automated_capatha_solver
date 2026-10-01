@@ -85,12 +85,15 @@ extension/
 
 ## Performance: GPU vs CPU
 
-Ollama resizes every image to a fixed size, so each **new** image costs about 1,100 prompt tokens with `qwen2.5vl:7b`, however small the captcha is. Measured times:
+Ollama resizes every image to a fixed size, so the cost of a **new** image depends on the model, not on how small the captcha is. Measured times:
 
-| Hardware | Time per new image (`qwen2.5vl:7b`) |
-|---|---|
-| Laptop CPU only (Intel Core 5 210H, 8 cores, 16 GB RAM) | ~90–100 s |
-| Same image sent a second time (Ollama cache) | 2–5 s |
+| Model on a laptop CPU (Intel Core 5 210H, 8 cores, 16 GB RAM, no GPU) | Image tokens | Time per new image | Text-captcha accuracy in tests |
+|---|---|---|---|
+| `qwen2.5vl:7b` (default) | ~1,100 | ~90–100 s | 5/5 on the playground; misread one `7` as `1` in a separate test |
+| `gemma3:4b` | ~300 | ~47–54 s | 3/3 |
+| Either model, same image sent a second time (Ollama cache) | | 2–5 s | |
+
+**On a CPU-only machine, use `gemma3:4b`** (`ollama pull gemma3:4b`, then set it in the popup). It is about twice as fast. Keep `qwen2.5vl:7b` if you have a GPU.
 
 On a CPU-only machine, text and math captchas work, but you have to wait about 1.5 minutes. Image-grid challenges need 9–16 requests, which isn't practical on a CPU. For those, use a GPU, use **Hugging Face**, or set **Tile strategy → One request with numbered grid**. Defaults are tuned for CPU: one request at a time, with a 5-minute timeout. Raise **Parallel requests** when using Hugging Face or a GPU server.
 
