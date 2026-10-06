@@ -1,1 +1,117 @@
-# automated_capatha_solver
+# AI Captcha Solver: Chrome extension
+
+A Manifest V3 Chrome extension that detects and solves CAPTCHAs with a vision LLM. The model can run **locally through [Ollama](https://ollama.com)** (free, private) or come from the **Hugging Face Inference API** (free tier). Any **OpenAI-compatible** server (LM Studio, llama.cpp, vLLM, …) also works.
+
+| CAPTCHA type | How it is solved | Status |
+|---|---|---|
+| Distorted text / number images (`<img>` or `<canvas>` next to an input) | Vision-model OCR, then typed into the matching input | ✅ automatic |
+| Math images ("12 + 5 =") | OCR, then evaluated locally | ✅ automatic |
+| Text questions ("What is 7 × 3?", "What color is the sky?") | Arithmetic solved locally, other questions sent to the model | ✅ automatic |
+| reCAPTCHA v2 checkbox | Clicks the checkbox | ✅ automatic |
+| reCAPTCHA v2 image grids (3×3, 4×4, dynamic "click until none left") | Splits the grid and asks the model about each tile | ✅ automatic (accuracy depends on the model) |
+| reCAPTCHA v2 audio | Speech-to-text (Whisper on HF or a local OpenAI-compatible server) | ✅ optional |
+| hCaptcha checkbox + image grids (with "example" matching) | Asks the model about each tile, comparing with the example image when there is one | ⚠️ best effort (hCaptcha changes its UI often) |
+| hCaptcha canvas "click on the object" | Model returns coordinates on a grid overlay, then the extension clicks | ⚠️ best effort |
+| Cloudflare Turnstile | Clicks "Verify you are human" | ⚠️ best effort (often passes on its own) |
+| Anything else: "click the matching places", "click in order", sliders, odd puzzles | **Visual solve**: takes a screenshot, the model returns click / type / drag actions, and the extension performs them, including inside iframes | 🧪 experimental, run on demand |
+| Any captcha image | Right-click → **Solve CAPTCHA in this image** (fills the nearest input or copies the text to the clipboard) | ✅ manual |
+
+## Quick start (local, with Ollama)
+
+1. Install Ollama and pull a vision model:
+   ```sh
+   ollama pull qwen2.5vl:7b        # recommended: strong OCR (~6 GB)
+   # smaller or alternative models: qwen2.5vl:3b, gemma3:4b, minicpm-v, llava:7b
+   ```
+2. Load the extension:
+   - Open `chrome://extensions` and turn on **Developer mode**.
+   - Click **Load unpacked** and select the [`extension/`](extension/) folder.
+3. Click the extension icon, check the model name, and press **Test connection**.
+4. Open a page with a CAPTCHA. With **Solve automatically** on, it is solved without any action; otherwise press **Solve now** or <kbd>Alt+Shift+S</kbd>.
+
+> **CORS:** Ollama normally rejects requests from `chrome-extension://` origins with HTTP 403. The extension handles this with a `declarativeNetRequest` session rule that removes the `Origin` header from its own requests to the configured Ollama URL. If you still see a 403, start Ollama with `OLLAMA_ORIGINS="chrome-extension://*"`. On Windows, set it as a user environment variable and restart the Ollama app.
+
+## Using Hugging Face instead (free)
+
+1. Create a free access token at <https://huggingface.co/settings/tokens>. A "Read" token is enough, but it must have **"Make calls to Inference Providers"** enabled.
+2. In the popup, choose **Provider → Hugging Face**, paste the token, and pick a vision model, for example `Qwen/Qwen2.5-VL-7B-Instruct`. Requests go to the OpenAI-compatible router at `https://router.huggingface.co/v1`.
+3. Optional: for the reCAPTCHA **audio** strategy, open *Advanced*, set **Speech-to-text → Hugging Face Whisper**, and set **reCAPTCHA strategy → Audio**.
+
+Free-tier credits are limited each month. Grid captchas use one request per tile (9–16 per round). Switch **Tile strategy → One request with numbered grid** to save quota, at some cost in accuracy.
+
+## Using another local server
+
+Choose **OpenAI-compatible** and set the base URL, for example `http://localhost:1234/v1` for LM Studio or `http://localhost:8080/v1` for llama.cpp, plus the model name. The same base URL is used for `/audio/transcriptions` if you pick it as the speech-to-text provider (for example with [faster-whisper-server](https://github.com/fedirz/faster-whisper-server)).
+
+## Testing
+
+```sh
+cd test-pages
+python -m http.server 8000
+# open http://localhost:8000
+```
+
+The [playground page](test-pages/index.html) generates five local captchas: digits in an `<img>`, alphanumeric on a `<canvas>`, a math image, a math question, and an anti-spam question. Each has a **Check** button that shows whether the answer is correct. It also links to the official reCAPTCHA, hCaptcha and Turnstile demo pages.
+
+To debug, turn on **Debug logging** in the popup and watch the page console. Background (model) errors appear in the popup's activity list, and also under `chrome://extensions` → *service worker* → Console.
+
+## How it works
+
+```
+extension/
+├── manifest.json
+├── icons/                      generated by tools/make_icons.py
+└── src/
+    ├── shared/defaults.js      default settings (shared by all contexts)
+    ├── background/
+    │   ├── background.js       message router, screenshots, image fetches, context menu, shortcuts, Ollama CORS rule
+    │   ├── llm.js              Ollama / Hugging Face / OpenAI-compatible chat + Whisper STT, concurrency limit, timeouts
+    │   └── tasks.js            prompts and parsing: ocr, classifyTile, classifyGrid, locate, question, visual
+    ├── content/                injected into every frame (each script checks whether it applies)
+    │   ├── common.js           helpers: settings, clicks/drags/typing, image capture, tile splitting, toasts
+    │   ├── text-captcha.js     finds image+input pairs by score, OCR, fill, re-solve on refresh
+    │   ├── math-captcha.js     arithmetic and anti-spam questions
+    │   ├── recaptcha.js        anchor checkbox + bframe image/audio challenge loop
+    │   ├── hcaptcha.js         checkbox + challenge grid/canvas loop
+    │   ├── turnstile.js        Cloudflare checkbox (inside closed shadow roots)
+    │   └── visual.js           screenshot → model → click/type/drag, routed into iframes
+    └── popup/                  settings, test connection, solve buttons, activity log
+```
+
+- **Model calls happen only in the service worker.** Content scripts send images as data URLs, so the model never needs CORS access to the page and page scripts can't see the token.
+- **Image capture** tries, in order: reading the canvas directly → screenshotting the tab and cropping (so session-bound captcha URLs aren't requested a second time) → fetching the image again through the background worker. For canvas challenges inside iframes, the top frame reports where the iframe sits so the screenshot can be cropped correctly.
+- **Grid challenges** are split into tiles and upscaled to at least 224 px. The model answers yes/no per tile (or, with the grid strategy, returns a list of numbered cells). For dynamic reCAPTCHA rounds, the replacement tiles are classified again until none match.
+- **Loop safety:** each widget runs at most *Max rounds* attempts. Solved challenges are tracked by a signature so the same one isn't retried, and text inputs the user has typed into are never overwritten.
+
+## Performance: GPU vs CPU
+
+Ollama resizes every image to a fixed size, so the cost of a **new** image depends on the model, not on how small the captcha is. Measured times:
+
+| Model on a laptop CPU (Intel Core 5 210H, 8 cores, 16 GB RAM, no GPU) | Image tokens | Time per new image | Text-captcha accuracy in tests |
+|---|---|---|---|
+| `qwen2.5vl:7b` (default) | ~1,100 | ~90–100 s | 5/5 on the playground; misread one `7` as `1` in a separate test |
+| `gemma3:4b` | ~300 | ~47–54 s | 3/3 |
+| Either model, same image sent a second time (Ollama cache) | | 2–5 s | |
+
+**On a CPU-only machine, use `gemma3:4b`** (`ollama pull gemma3:4b`, then set it in the popup). It is about twice as fast. Keep `qwen2.5vl:7b` if you have a GPU.
+
+On a CPU-only machine, text and math captchas work, but you have to wait about 1.5 minutes. Image-grid challenges need 9–16 requests, which isn't practical on a CPU. For those, use a GPU, use **Hugging Face**, or set **Tile strategy → One request with numbered grid**. Defaults are tuned for CPU: one request at a time, with a 5-minute timeout. Raise **Parallel requests** when using Hugging Face or a GPU server.
+
+Close other large models (`ollama ps`). With 16 GB of RAM, two loaded models can push every request past the timeout.
+
+## Limitations
+
+- Accuracy depends on the model. `qwen2.5vl:7b` reads text captchas well. Object tiles (traffic lights, crosswalks) are noticeably better with larger models (Qwen2.5-VL-32B/72B on Hugging Face).
+- reCAPTCHA and hCaptcha score browser behaviour. Synthetic clicks are untrusted events, so a site may still serve repeated challenges or "Try again later" to automated sessions.
+- Slider and puzzle captchas only go through the experimental visual solver.
+- Use this only on sites and accounts where you are allowed to automate. It is intended for accessibility, testing your own forms, and research.
+
+## Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| <kbd>Alt+Shift+S</kbd> | Solve captchas on this page |
+| <kbd>Alt+Shift+V</kbd> | Visual solve (screenshot + AI) |
+| Right-click an image | **Solve CAPTCHA in this image** |
+
+Change them at `chrome://extensions/shortcuts`.
